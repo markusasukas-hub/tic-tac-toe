@@ -12,11 +12,17 @@ open tictactoe.html
 
 ## Git workflow
 
-After every meaningful change: commit with a clean message and push to GitHub.
+**Commit and push after every piece of completed work** — no exceptions. This keeps GitHub in sync at all times so no progress is ever lost and any state can be reverted.
+
+Rules:
+- Commit after each logical unit of work (a feature added, a bug fixed, a file created/deleted).
+- Never batch multiple unrelated changes into one commit.
+- Write commit messages in the imperative, present tense: `"Add AI opponent"` not `"Added AI opponent"` or `"Adding AI opponent"`. Keep the subject line under 72 characters.
+- Always push immediately after committing — local-only commits defeat the purpose.
 
 ```bash
 git add <changed files>
-git commit -m "short imperative summary of what changed"
+git commit -m "Short imperative summary of what changed"
 git push
 ```
 
