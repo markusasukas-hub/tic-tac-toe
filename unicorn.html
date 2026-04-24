@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Unicorn Jump</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #080014;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    canvas { border-radius: 12px; box-shadow: 0 0 50px rgba(168, 85, 247, 0.35); display: block; }
+    #hint { color: #a78bfa; margin-top: 14px; font-size: 13px; letter-spacing: 3px; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">SPACE / TAP TO JUMP</div>
+  <script>
+  (() => {
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const W = Math.min(820, window.innerWidth - 16);
+    const H = Math.round(W * 9 / 16);
+    canvas.width = W;
+    canvas.height = H;
+
+    const GY = H - 48;
+    const GRAVITY = 0.6;
+    const JUMP_V = -15;
+    const COLORS = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#74c0fc','#cc5de8','#f783ac'];
+
+    const STARS = Array.from({length: 100}, () => ({
+      x: Math.random() * W,
+      y: Math.random() * GY * 0.9,
+      r: Math.random() * 1.8 + 0.3,
+      p: Math.random() * 6.28
+    }));
+
+    const uni = { x: W * 0.22, y: GY, vy: 0, onGround: true };
+    let frame = 0;
+
+    const doJump = () => { if (uni.onGround) { uni.vy = JUMP_V; uni.onGround = false; } };
+    window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); doJump(); } });
+    canvas.addEventListener('pointerdown', doJump);
+
+    function update() {
+      if (!uni.onGround) {
+        uni.vy += GRAVITY;
+        uni.y += uni.vy;
+        if (uni.y >= GY) { uni.y = GY; uni.vy = 0; uni.onGround = true; }
+      }
+    }
+
+    function drawBg() {
+      const sk = ctx.createLinearGradient(0, 0, 0, GY);
+      sk.addColorStop(0, '#0d0025');
+      sk.addColorStop(1, '#210855');
+      ctx.fillStyle = sk;
+      ctx.fillRect(0, 0, W, GY);
+
+      STARS.forEach(s => {
+        s.p += 0.018;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${(0.3 + 0.7 * Math.abs(Math.sin(s.p))).toFixed(2)})`;
+        ctx.fill();
+      });
+
+      // crescent moon
+      ctx.beginPath(); ctx.arc(W - 85, 58, 36, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff7b3'; ctx.fill();
+      ctx.beginPath(); ctx.arc(W - 68, 49, 28, 0, Math.PI * 2);
+      ctx.fillStyle = '#0d0025'; ctx.fill();
+
+      const gd = ctx.createLinearGradient(0, GY, 0, H);
+      gd.addColorStop(0, '#3b0764'); gd.addColorStop(1, '#13001f');
+      ctx.fillStyle = gd;
+      ctx.fillRect(0, GY, W, H - GY);
+
+      ctx.save();
+      ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 14;
+      ctx.strokeStyle = '#9333ea'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, GY); ctx.lineTo(W, GY); ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawLeg(lx, baseY, phase) {
+      const sw = uni.onGround ? Math.sin(frame * 0.14 + phase) * 5 : 0;
+      const mid = { x: lx + sw, y: baseY - 14 };
+      const bot = { x: lx + sw * 0.55, y: baseY - 1 };
+
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#ddd5f5'; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(lx, baseY - 30); ctx.lineTo(mid.x, mid.y); ctx.stroke();
+      ctx.strokeStyle = '#c5b5e8'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(mid.x, mid.y); ctx.lineTo(bot.x, bot.y); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(bot.x, baseY + 1, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#7e22ce'; ctx.fill();
+    }
+
+    function drawTail(tx, ty) {
+      for (let i = 0; i < 7; i++) {
+        const wx = Math.sin(frame * 0.09 + i * 0.7) * 11;
+        const wy = Math.cos(frame * 0.07 + i * 0.4) * 4;
+        ctx.beginPath();
+        ctx.arc(tx + wx, ty + i * 7.5 + wy, Math.max(1, 6 - i * 0.6), 0, Math.PI * 2);
+        ctx.fillStyle = COLORS[i]; ctx.globalAlpha = 0.82; ctx.fill(); ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawMane(mx, my) {
+      for (let i = 0; i < 7; i++) {
+        const wx = Math.sin(frame * 0.11 + i * 0.8) * 3;
+        ctx.beginPath();
+        ctx.arc(mx + wx, my + i * 6, Math.max(1, 5.5 - i * 0.45), 0, Math.PI * 2);
+        ctx.fillStyle = COLORS[i]; ctx.globalAlpha = 0.88; ctx.fill(); ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawHorn(hx, hy) {
+      const g = ctx.createLinearGradient(hx, hy - 30, hx, hy);
+      g.addColorStop(0, '#ffd700'); g.addColorStop(0.5, '#ff69b4'); g.addColorStop(1, '#c084fc');
+      ctx.beginPath(); ctx.moveTo(hx, hy - 30); ctx.lineTo(hx - 5, hy); ctx.lineTo(hx + 5, hy);
+      ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx, hy - 28); ctx.lineTo(hx - 1.5, hy - 6);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke();
+    }
+
+    function drawSparkles(cx, cy) {
+      for (let i = 0; i < 7; i++) {
+        const ang = frame * 0.08 + i * (Math.PI * 2 / 7);
+        const dist = 26 + Math.sin(frame * 0.2 + i) * 8;
+        const r = 1.5 + Math.abs(Math.sin(frame * 0.15 + i * 1.1)) * 2;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist, r, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS[i % 7]; ctx.globalAlpha = 0.8; ctx.fill(); ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawUnicorn() {
+      const ux = uni.x, fy = uni.y;
+      const bX = ux, bY = fy - 42;
+      const hX = ux + 30, hY = fy - 68;
+
+      drawTail(ux - 28, fy - 56);
+
+      // back legs (behind body)
+      drawLeg(ux - 16, fy, 0);
+      drawLeg(ux - 4, fy, Math.PI);
+
+      // body
+      ctx.beginPath();
+      ctx.ellipse(bX, bY, 31, 18, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#f2edff'; ctx.fill();
+      ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 1.5; ctx.stroke();
+
+      // neck
+      ctx.beginPath();
+      ctx.moveTo(ux + 16, fy - 52);
+      ctx.bezierCurveTo(ux + 22, fy - 58, ux + 28, fy - 64, ux + 22, fy - 70);
+      ctx.bezierCurveTo(ux + 14, fy - 64, ux + 10, fy - 58, ux + 10, fy - 50);
+      ctx.closePath();
+      ctx.fillStyle = '#f2edff'; ctx.fill();
+
+      // head
+      ctx.beginPath();
+      ctx.ellipse(hX, hY, 13, 10, -0.1, 0, Math.PI * 2);
+      ctx.fillStyle = '#f2edff'; ctx.fill();
+      ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 1; ctx.stroke();
+
+      // snout
+      ctx.beginPath();
+      ctx.ellipse(hX + 10, hY + 3, 7, 5, 0.25, 0, Math.PI * 2);
+      ctx.fillStyle = '#fde8f0'; ctx.fill();
+
+      // nostril
+      ctx.beginPath();
+      ctx.ellipse(hX + 14, hY + 4, 1.8, 1.2, 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffa0c0'; ctx.fill();
+
+      // eye
+      ctx.beginPath(); ctx.arc(hX + 2, hY - 2, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#120020'; ctx.fill();
+      ctx.beginPath(); ctx.arc(hX + 3.2, hY - 3.2, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+
+      // eyelashes
+      ctx.strokeStyle = '#120020'; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(hX + 2 + i * 2.5, hY - 5.5);
+        ctx.lineTo(hX + 1.8 + i * 2.5, hY - 8.5);
+        ctx.stroke();
+      }
+
+      // ear
+      ctx.beginPath();
+      ctx.moveTo(hX - 6, hY - 8); ctx.lineTo(hX - 11, hY - 18); ctx.lineTo(hX - 1, hY - 13);
+      ctx.closePath(); ctx.fillStyle = '#f2edff'; ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hX - 7, hY - 9); ctx.lineTo(hX - 10, hY - 16); ctx.lineTo(hX - 2, hY - 13);
+      ctx.closePath(); ctx.fillStyle = '#ffa0c0'; ctx.fill();
+
+      drawHorn(hX + 3, hY - 9);
+      drawMane(hX - 10, hY - 2);
+
+      // front legs (in front of body)
+      drawLeg(ux + 12, fy, Math.PI);
+      drawLeg(ux + 24, fy, 0);
+
+      if (!uni.onGround) drawSparkles(bX, bY);
+    }
+
+    function loop() {
+      ctx.clearRect(0, 0, W, H);
+      drawBg();
+      update();
+      drawUnicorn();
+      frame++;
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  })();
+  </script>
+</body>
+</html>
