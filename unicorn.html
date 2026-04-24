@@ -19,7 +19,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">SPACE / TAP TO JUMP</div>
+  <div id="hint">← → MOVE &nbsp;·&nbsp; SPACE / TAP TO JUMP</div>
   <script>
   (() => {
     const canvas = document.getElementById('c');
@@ -32,6 +32,7 @@
     const GY = H - 48;
     const GRAVITY = 0.6;
     const JUMP_V = -15;
+    const SPEED = 3.5;
     const COLORS = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#74c0fc','#cc5de8','#f783ac'];
 
     const STARS = Array.from({length: 100}, () => ({
@@ -41,32 +42,106 @@
       p: Math.random() * 6.28
     }));
 
-    const uni = { x: W * 0.22, y: GY, vy: 0, onGround: true };
-    let frame = 0;
-
-    const doJump = () => { if (uni.onGround) { uni.vy = JUMP_V; uni.onGround = false; } };
-    window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); doJump(); } });
+    // Input
+    const keys = {};
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+      if (e.code === 'Space') doJump();
+    });
+    window.addEventListener('keyup', e => { keys[e.code] = false; });
     canvas.addEventListener('pointerdown', doJump);
 
+    // State
+    const uni = { x: W * 0.3, y: GY, vy: 0, onGround: true, dir: 1, moving: false };
+    const birds = [];
+    let frame = 0;
+
+    function doJump() { if (uni.onGround) { uni.vy = JUMP_V; uni.onGround = false; } }
+
+    // --- Birds ---
+    function spawnBird() {
+      const fromLeft = Math.random() > 0.5;
+      const spd = 1.3 + Math.random() * 2.2;
+      birds.push({
+        x: fromLeft ? -45 : W + 45,
+        y: GY * 0.1 + Math.random() * GY * 0.44,
+        vx: fromLeft ? spd : -spd,
+        vy: 0,
+        state: 'flying',   // 'flying' | 'falling' | 'dead'
+        wing: Math.random() * Math.PI * 2,
+        spin: 0,
+        spinV: 0,
+        deadTimer: 0
+      });
+    }
+
+    function updateBirds() {
+      const flying = birds.filter(b => b.state === 'flying').length;
+      if (Math.random() < 0.007 && flying < 7) spawnBird();
+
+      for (let i = birds.length - 1; i >= 0; i--) {
+        const b = birds[i];
+        if (b.state === 'flying') {
+          b.x += b.vx;
+          b.wing += 0.13;
+          if (b.x < -80 || b.x > W + 80) birds.splice(i, 1);
+        } else if (b.state === 'falling') {
+          b.vy += 0.5;
+          b.y += b.vy;
+          b.x += b.vx * 0.25;
+          b.spin += b.spinV;
+          if (b.y >= GY - 5) { b.y = GY - 5; b.state = 'dead'; }
+        } else {
+          b.deadTimer++;
+          if (b.deadTimer > 220) birds.splice(i, 1);
+        }
+      }
+    }
+
+    function checkCollisions() {
+      if (uni.onGround) return;
+      const ux = uni.x, uy = uni.y - 42; // body centre
+      birds.forEach(b => {
+        if (b.state !== 'flying') return;
+        const dx = b.x - ux, dy = b.y - uy;
+        if (dx * dx + dy * dy < 38 * 38) {
+          b.state = 'falling';
+          b.vy = -4;
+          b.spinV = (Math.random() > 0.5 ? 1 : -1) * (0.08 + Math.random() * 0.13);
+        }
+      });
+    }
+
+    // --- Physics / movement ---
     function update() {
+      uni.moving = false;
+      if (keys['ArrowRight'] && !keys['ArrowLeft']) {
+        uni.x = Math.min(W - 56, uni.x + SPEED);
+        uni.dir = 1; uni.moving = true;
+      }
+      if (keys['ArrowLeft'] && !keys['ArrowRight']) {
+        uni.x = Math.max(56, uni.x - SPEED);
+        uni.dir = -1; uni.moving = true;
+      }
       if (!uni.onGround) {
         uni.vy += GRAVITY;
         uni.y += uni.vy;
         if (uni.y >= GY) { uni.y = GY; uni.vy = 0; uni.onGround = true; }
       }
+      updateBirds();
+      checkCollisions();
     }
 
+    // --- Drawing ---
     function drawBg() {
       const sk = ctx.createLinearGradient(0, 0, 0, GY);
-      sk.addColorStop(0, '#0d0025');
-      sk.addColorStop(1, '#210855');
-      ctx.fillStyle = sk;
-      ctx.fillRect(0, 0, W, GY);
+      sk.addColorStop(0, '#0d0025'); sk.addColorStop(1, '#210855');
+      ctx.fillStyle = sk; ctx.fillRect(0, 0, W, GY);
 
       STARS.forEach(s => {
         s.p += 0.018;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(255,255,255,${(0.3 + 0.7 * Math.abs(Math.sin(s.p))).toFixed(2)})`;
         ctx.fill();
       });
@@ -77,10 +152,10 @@
       ctx.beginPath(); ctx.arc(W - 68, 49, 28, 0, Math.PI * 2);
       ctx.fillStyle = '#0d0025'; ctx.fill();
 
+      // ground
       const gd = ctx.createLinearGradient(0, GY, 0, H);
       gd.addColorStop(0, '#3b0764'); gd.addColorStop(1, '#13001f');
-      ctx.fillStyle = gd;
-      ctx.fillRect(0, GY, W, H - GY);
+      ctx.fillStyle = gd; ctx.fillRect(0, GY, W, H - GY);
 
       ctx.save();
       ctx.shadowColor = '#a855f7'; ctx.shadowBlur = 14;
@@ -89,17 +164,57 @@
       ctx.restore();
     }
 
+    function drawBird(b) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+
+      if (b.state === 'flying') {
+        const flap = Math.sin(b.wing) * 9;
+        ctx.strokeStyle = '#a5b4fc'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        // left wing
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.quadraticCurveTo(-11, -flap, -20, flap * 0.3); ctx.stroke();
+        // right wing
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.quadraticCurveTo(11, -flap, 20, flap * 0.3); ctx.stroke();
+        // body
+        ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#c4b5fd'; ctx.fill();
+
+      } else if (b.state === 'falling') {
+        ctx.rotate(b.spin);
+        ctx.strokeStyle = '#a5b4fc'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-20, -3); ctx.lineTo(20, 3); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#c4b5fd'; ctx.fill();
+
+      } else {
+        // dead on ground — fade out
+        ctx.globalAlpha = Math.max(0, 1 - b.deadTimer / 220);
+        ctx.strokeStyle = '#a5b4fc'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-16, -2); ctx.lineTo(16, 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#c4b5fd'; ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+    }
+
+    // Unicorn sub-parts (all drawn inside the flip transform)
     function drawLeg(lx, baseY, phase) {
-      const sw = uni.onGround ? Math.sin(frame * 0.14 + phase) * 5 : 0;
-      const mid = { x: lx + sw, y: baseY - 14 };
-      const bot = { x: lx + sw * 0.55, y: baseY - 1 };
+      const amt  = uni.onGround ? (uni.moving ? 9 : 5) : 0;
+      const spd  = uni.moving ? 0.22 : 0.14;
+      const sw   = Math.sin(frame * spd + phase) * amt;
+      const midX = lx + sw,       midY = baseY - 14;
+      const botX = lx + sw * 0.5, botY = baseY - 1;
 
       ctx.lineCap = 'round';
       ctx.strokeStyle = '#ddd5f5'; ctx.lineWidth = 7;
-      ctx.beginPath(); ctx.moveTo(lx, baseY - 30); ctx.lineTo(mid.x, mid.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(lx, baseY - 30); ctx.lineTo(midX, midY); ctx.stroke();
       ctx.strokeStyle = '#c5b5e8'; ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(mid.x, mid.y); ctx.lineTo(bot.x, bot.y); ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(bot.x, baseY + 1, 5, 3, 0, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.moveTo(midX, midY); ctx.lineTo(botX, botY); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(botX, baseY + 1, 5, 3, 0, 0, Math.PI * 2);
       ctx.fillStyle = '#7e22ce'; ctx.fill();
     }
 
@@ -133,9 +248,9 @@
 
     function drawSparkles(cx, cy) {
       for (let i = 0; i < 7; i++) {
-        const ang = frame * 0.08 + i * (Math.PI * 2 / 7);
+        const ang  = frame * 0.08 + i * (Math.PI * 2 / 7);
         const dist = 26 + Math.sin(frame * 0.2 + i) * 8;
-        const r = 1.5 + Math.abs(Math.sin(frame * 0.15 + i * 1.1)) * 2;
+        const r    = 1.5 + Math.abs(Math.sin(frame * 0.15 + i * 1.1)) * 2;
         ctx.beginPath();
         ctx.arc(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist, r, 0, Math.PI * 2);
         ctx.fillStyle = COLORS[i % 7]; ctx.globalAlpha = 0.8; ctx.fill(); ctx.globalAlpha = 1;
@@ -147,11 +262,17 @@
       const bX = ux, bY = fy - 42;
       const hX = ux + 30, hY = fy - 68;
 
+      // Mirror the whole unicorn around uni.x when facing left
+      ctx.save();
+      if (uni.dir === -1) {
+        ctx.translate(ux, 0); ctx.scale(-1, 1); ctx.translate(-ux, 0);
+      }
+
       drawTail(ux - 28, fy - 56);
 
-      // back legs (behind body)
+      // back legs (drawn before body so body covers their tops)
       drawLeg(ux - 16, fy, 0);
-      drawLeg(ux - 4, fy, Math.PI);
+      drawLeg(ux - 4,  fy, Math.PI);
 
       // body
       ctx.beginPath();
@@ -164,8 +285,7 @@
       ctx.moveTo(ux + 16, fy - 52);
       ctx.bezierCurveTo(ux + 22, fy - 58, ux + 28, fy - 64, ux + 22, fy - 70);
       ctx.bezierCurveTo(ux + 14, fy - 64, ux + 10, fy - 58, ux + 10, fy - 50);
-      ctx.closePath();
-      ctx.fillStyle = '#f2edff'; ctx.fill();
+      ctx.closePath(); ctx.fillStyle = '#f2edff'; ctx.fill();
 
       // head
       ctx.beginPath();
@@ -209,10 +329,13 @@
       drawHorn(hX + 3, hY - 9);
       drawMane(hX - 10, hY - 2);
 
-      // front legs (in front of body)
+      // front legs (drawn after body so they appear in front)
       drawLeg(ux + 12, fy, Math.PI);
       drawLeg(ux + 24, fy, 0);
 
+      ctx.restore(); // end flip
+
+      // sparkles are symmetric — draw outside flip so they stay in world space
       if (!uni.onGround) drawSparkles(bX, bY);
     }
 
@@ -220,11 +343,13 @@
       ctx.clearRect(0, 0, W, H);
       drawBg();
       update();
+      birds.forEach(drawBird);
       drawUnicorn();
       frame++;
       requestAnimationFrame(loop);
     }
 
+    spawnBird(); spawnBird(); spawnBird();
     loop();
   })();
   </script>
